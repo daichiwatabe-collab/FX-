@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FX損益カレンダー＆年間推移</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Noto+Sans+JP:wght@300;400;500;700&display=swap');
+        body {
+            font-family: 'Inter', 'Noto Sans JP', sans-serif;
+        }
+        /* スクロールバーのカスタマイズ */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+    </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800">
+
+    <div class="max-w-6xl mx-auto px-4 py-8">
+        <!-- ヘッダー -->
+        <header class="mb-8 flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+            <div class="flex items-center gap-3">
+                <div class="bg-indigo-600 text-white p-3 rounded-xl shadow-md shadow-indigo-100">
+                    <i class="fa-solid fa-chart-line text-2xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold text-slate-900">FX損益カレンダー</h1>
+                    <p class="text-xs text-slate-500">毎日のトレード結果を視覚的に記録・分析</p>
+                </div>
+            </div>
+            
+            <!-- 年選択 & データ操作 -->
+            <div class="flex items-center gap-3">
+                <button id="prevYearBtn" class="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition">
+                    <i class="fa-solid fa-chevron-left"></i>
+                </button>
+                <span id="currentYearDisplay" class="text-xl font-bold text-slate-800 tracking-wider">2026年</span>
+                <button id="nextYearBtn" class="p-2 hover:bg-slate-100 rounded-lg text-slate-600 transition">
+                    <i class="fa-solid fa-chevron-right"></i>
+                </button>
+                <div class="h-6 w-[1px] bg-slate-200 mx-2"></div>
+                <button id="exportBtn" class="text-xs flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition" title="データをJSONでバックアップ">
+                    <i class="fa-solid fa-download"></i> バックアップ
+                </button>
+                <button id="importBtn" class="text-xs flex items-center gap-1.5 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium rounded-lg transition" title="データを復元">
+                    <i class="fa-solid fa-upload"></i> 復元
+                </button>
+                <input type="file" id="importFile" class="hidden" accept=".json">
+            </div>
+        </header>
+
+        <!-- メイングリッド -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            <!-- 左・中央カラム: カレンダーと入力エリア (2カラム幅) -->
+            <div class="lg:col-span-2 space-y-8">
+                
+                <!-- カレンダーカード -->
+                <div class="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
+                    <!-- カレンダーヘッダー -->
+                    <div class="bg-slate-900 text-white p-6 flex justify-between items-center">
+                        <div class="flex items-center gap-2">
+                            <i class="fa-regular fa-calendar-days text-xl text-indigo-400"></i>
+                            <h2 id="calendarMonthDisplay" class="text-xl font-bold">10月</h2>
+                        </div>
+                        <div class="flex items-center gap-1 bg-slate-800 rounded-lg p-1">
+                            <button id="prevMonthBtn" class="p-2 hover:bg-slate-700 rounded text-slate-300 transition">
+                                <i class="fa-solid fa-chevron-left"></i>
+                            </button>
+                            <button id="todayBtn" class="px-3 py-1 text-xs font-semibold hover:bg-slate-700 rounded text-slate-300 transition">
+                                今月
+                            </button>
+                            <button id="nextMonthBtn" class="p-2 hover:bg-slate-700 rounded text-slate-300 transition">
+                                <i class="fa-solid fa-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 曜日ヘッダー -->
+                    <div class="grid grid-cols-7 gap-px bg-slate-100 border-b border-slate-100 text-center font-semibold text-xs text-slate-500 py-3">
+                        <div class="text-rose-500">日</div>
+                        <div>月</div>
+                        <div>火</div>
+                        <div>水</div>
+                        <div>木</div>
+                        <div>金</div>
+                        <div class="text-blue-500">土</div>
+                    </div>
+
+                    <!-- カレンダーグリッド -->
+                    <div id="calendarGrid" class="grid grid-cols-7 gap-px bg-slate-100">
+                        <!-- JSで動的にセルを挿入 -->
+                    </div>
+                </div>
+
+                <!-- 月間集計カード (カレンダーの直下) -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div class="flex items-center justify-between mb-6">
+                        <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                            <i class="fa-solid fa-calculator text-indigo-500"></i>
+                            <span id="summaryMonthTitle">10月</span>の集計結果
+                        </h3>
+                        <span class="text-xs text-slate-400">※土日は入力から除外して計算可能です</span>
+                    </div>
+
+                    <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <!-- 月間合計 -->
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col justify-between">
+                            <span class="text-xs font-medium text-slate-500 block mb-1">月間損益合計</span>
+                            <span id="monthTotalProfit" class="text-xl font-bold tracking-tight text-slate-800">
+                                ¥0
+                            </span>
+                        </div>
+                        <!-- 勝率 -->
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col justify-between">
+                            <span class="text-xs font-medium text-slate-500 block mb-1">勝率</span>
+                            <div class="flex items-baseline gap-1">
+                                <span id="monthWinRate" class="text-xl font-bold text-slate-800">0%</span>
+                                <span id="monthWinLossCount" class="text-xxs text-slate-400 font-normal">(0勝0敗)</span>
+                            </div>
+                        </div>
+                        <!-- プラス合計 -->
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col justify-between">
+                            <span class="text-xs font-medium text-slate-500 block mb-1">総利益 (プラス日)</span>
+                            <span id="monthPlusTotal" class="text-lg font-bold text-blue-600">
+                                ¥0
+                            </span>
+                        </div>
+                        <!-- マイナス合計 -->
+                        <div class="bg-slate-50 p-4 rounded-xl border border-slate-100 flex flex-col justify-between">
+                            <span class="text-xs font-medium text-slate-500 block mb-1">総損失 (マイナス日)</span>
+                            <span id="monthMinusTotal" class="text-lg font-bold text-rose-600">
+                                ¥0
+                            </span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 年間推移グラフカード (さらにその下) -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
+                    <div class="flex items-center justify-between mb-6">
+                        <div>
+                            <h3 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+                                <i class="fa-solid fa-chart-bar text-indigo-500"></i>
+                                <span id="chartYearTitle">2026</span>年 月別損益推移
+                            </h3>
+                            <p class="text-xs text-slate-500 mt-1">1月〜12月の月間損益の推移グラフ（青：プラス、赤：マイナス）</p>
+                        </div>
+                        <div class="bg-slate-50 text-xs px-3 py-1.5 rounded-lg border border-slate-100">
+                            年間累計損益: <span id="yearAccumulatedProfit" class="font-bold text-slate-800">¥0</span>
+                        </div>
+                    </div>
+                    <div class="w-full h-80 relative">
+                        <canvas id="yearlyChart"></canvas>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- 右カラム: 選択した日付の損益入力 & 操作エリア (1カラム幅) -->
+            <div class="space-y-6">
+                
+                <!-- 入力フォームカード -->
+                <div class="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 sticky top-6">
+                    <div class="border-b border-slate-100 pb-4 mb-5">
+                        <div class="flex items-center gap-2 text-indigo-600 mb-1">
+                            <i class="fa-solid fa-pen-to-square"></i>
+                            <span class="text-xs font-bold uppercase tracking-wider">Editor</span>
+                        </div>
+                        
+                        <!-- 日付変更可能なインプット -->
+                        <div class="mt-1">
+                            <label for="datePickerInput" class="block text-xs font-semibold text-slate-500 mb-1">対象日を選択</label>
+                            <div class="relative">
+                                <input type="date" id="datePickerInput" class="block w-full rounded-xl border border-slate-200 py-2.5 px-3 text-slate-800 font-bold focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none text-base transition cursor-pointer bg-slate-50 hover:bg-slate-100">
+                            </div>
+                        </div>
+                    </div>
+
+                    <form id="recordForm" class="space-y-5" onsubmit="event.preventDefault();">
+                        <!-- 金額入力 -->
+                        <div>
+                            <label for="amountInput" class="block text-xs font-semibold text-slate-600 mb-1.5">損益金額 (円)</label>
+                            <div class="relative rounded-xl shadow-sm">
+                                <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-4">
+                                    <span class="text-slate-400 font-medium">¥</span>
+                                </div>
+                                <input type="number" id="amountInput" class="block w-full rounded-xl border border-slate-200 py-3 pl-9 pr-4 text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none text-lg font-semibold transition" placeholder="例: 15000 または -5000">
+                            </div>
+                            <p class="text-xxs text-slate-400 mt-1.5">※マイナスの場合は - (ハイフン) を付けて入力してください</p>
+                        </div>
+
+                        <!-- トレードメモ -->
+                        <div>
+                            <label for="memoInput" class="block text-xs font-semibold text-slate-600 mb-1.5">トレードメモ</label>
+                            <textarea id="memoInput" rows="4" class="block w-full rounded-xl border border-slate-200 p-3 text-sm text-slate-900 placeholder-slate-400 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none resize-none transition" placeholder="通貨ペア、ロット数、反省点など..."></textarea>
+                        </div>
+
+                        <!-- アクションボタン -->
+                        <div class="flex gap-3 pt-2">
+                            <button type="button" id="deleteBtn" class="flex-1 py-3 px-4 bg-slate-50 hover:bg-rose-50 text-slate-500 hover:text-rose-600 font-semibold rounded-xl text-sm border border-slate-200 hover:border-rose-100 transition flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-trash-can"></i> クリア
+                            </button>
+                            <button type="button" id="saveBtn" class="flex-[2] py-3 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold rounded-xl text-sm shadow-md shadow-indigo-100 transition flex items-center justify-center gap-2">
+                                <i class="fa-solid fa-check"></i> 保存する
+                            </button>
+                        </div>
+                    </form>
+                    
+                    <!-- カスタムトースト通知表示エリア -->
+                    <div id="toast" class="mt-4 p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-xl text-xs flex items-center gap-2 hidden transition-all duration-300">
+                        <i class="fa-solid fa-circle-check text-emerald-500 text-sm"></i>
+                        <span id="toastMsg">保存しました</span>
+                    </div>
+                </div>
+
+            </div>
+
+        </div>
+    </div>
+
+    <!-- スクリプト部 -->
+    <script>
+        // --- 状態管理 ---
+        let currentDate = new Date(); // 表示基準日
+        let selectedDateStr = "";     // 選択中の日付 (YYYY-MM-DD)
+        let tradesData = {};          // 全損益データ { "YYYY-MM-DD": { amount: 1000, memo: "..." } }
+        let chartInstance = null;      // Chart.js インスタンス
+
+        // --- DOM要素取得 ---
+        const currentYearDisplay = document.getElementById('currentYearDisplay');
+        const calendarMonthDisplay = document.getElementById('calendarMonthDisplay');
+        const calendarGrid = document.getElementById('calendarGrid');
+        
+        const prevYearBtn = document.getElementById('prevYearBtn');
+        const nextYearBtn = document.getElementById('nextYearBtn');
+        const prevMonthBtn = document.getElementById('prevMonthBtn');
+        const nextMonthBtn = document.getElementById('nextMonthBtn');
+        const todayBtn = document.getElementById('todayBtn');
+        
+        const datePickerInput = document.getElementById('datePickerInput');
+        const amountInput = document.getElementById('amountInput');
+        const memoInput = document.getElementById('memoInput');
+        const saveBtn = document.getElementById('saveBtn');
+        const deleteBtn = document.getElementById('deleteBtn');
+        
+        const summaryMonthTitle = document.getElementById('summaryMonthTitle');
+        const monthTotalProfit = document.getElementById('monthTotalProfit');
+        const monthWinRate = document.getElementById('monthWinRate');
+        const monthWinLossCount = document.getElementById('monthWinLossCount');
+        const monthPlusTotal = document.getElementById('monthPlusTotal');
+        const monthMinusTotal = document.getElementById('monthMinusTotal');
+        
+        const chartYearTitle = document.getElementById('chartYearTitle');
+        const yearAccumulatedProfit = document.getElementById('yearAccumulatedProfit');
+        
+        const exportBtn = document.getElementById('exportBtn');
+        const importBtn = document.getElementById('importBtn');
+        const importFile = document.getElementById('importFile');
+        const toast = document.getElementById('toast');
+        const toastMsg = document.getElementById('toastMsg');
+
+        // --- 起動初期化 ---
+        window.addEventListener('DOMContentLoaded', () => {
+            loadFromLocalStorage();
+            setTodaySelected();
+            renderApp();
+        });
+
+        // データの読み込み
+        function loadFromLocalStorage() {
+            const data = localStorage.getItem('fx_trades_data');
+            if (data) {
+                try {
+                    tradesData = JSON.parse(data);
+                } catch (e) {
+                    console.error("データの読み込みに失敗しました", e);
+                    tradesData = {};
+                }
+            } else {
+                // サンプルデモデータを少し用意（未入力時の寂しさを防ぐ）
+                const demoYear = currentDate.getFullYear();
+                const demoMonth = String(currentDate.getMonth() + 1).padStart(2, '0');
+                tradesData = {
+                    [`${demoYear}-${demoMonth}-05`]: { amount: 15000, memo: "ドル円 上昇トレンド押し目買い" },
+                    [`${demoYear}-${demoMonth}-12`]: { amount: -8000, memo: "ユーロドル 損切りルール遅れ" },
+                    [`${demoYear}-${demoMonth}-15`]: { amount: 24000, memo: "ポンド円 利確目標達成" },
+                    [`${demoYear}-${demoMonth}-19`]: { amount: -3500, memo: "微損撤退" },
+                    [`${demoYear}-${demoMonth}-22`]: { amount: 12000, memo: "レンジ下限からの反発" }
+                };
+                saveToLocalStorage();
+            }
+        }
+
+        // データの保存
+        function saveToLocalStorage() {
+            localStorage.setItem('fx_trades_data', JSON.stringify(tradesData));
+        }
+
+        // 本日の日付を選択状態に設定
+        function setTodaySelected() {
+            const today = new Date();
+            selectedDateStr = formatDate(today);
+            currentDate = new Date(today.getFullYear(), today.getMonth(), 1); // 表示月も今月に設定
+        }
+
+        // 日付フォーマット (YYYY-MM-DD)
+        function formatDate(date) {
+            const y = date.getFullYear();
+            const m = String(date.getMonth() + 1).padStart(2, '0');
+            const d = String(date.getDate()).padStart(2, '0');
+            return `${y}-${m}-${d}`;
+        }
+
+        // 全体の描画
+        function renderApp() {
+            renderHeader();
+            renderCalendar();
+            renderSelectedDayForm();
+            renderSummary();
+            renderChart();
+        }
+
+        // ヘッダーの年月表示を更新
+        function renderHeader() {
+            currentYearDisplay.textContent = `${currentDate.getFullYear()}年`;
+            calendarMonthDisplay.textContent = `${currentDate.getMonth() + 1}月`;
+            summaryMonthTitle.textContent = `${currentDate.getMonth() + 1}月`;
+            chartYearTitle.textContent = currentDate.getFullYear();
+        }
+
+        // カレンダーのレンダリング
+        function renderCalendar() {
+            calendarGrid.innerHTML = "";
+            
+            const year = currentDate.getFullYear();
+            const month = currentDate.getMonth(); // 0-11
+            
+            // 月の最初の日と最後の日
+            const firstDay = new Date(year, month, 1);
+            const lastDay = new Date(year, month + 1, 0);
+            
+            // 開始曜日のインデックス (0:日, 1:月, ... 6:土)
+            const startDayIndex = firstDay.getDay();
+            const totalDays = lastDay.getDate();
+            
+            // 前月の最後の日（前月分の空白埋め用）
+            const prevMonthLastDay = new Date(year, month, 0).getDate();
+            
+            // 1. 前月分の日付を埋める (薄く表示)
+            for (let i = startDayIndex - 1; i >= 0; i--) {
+                const dayNum = prevMonthLastDay - i;
+                const prevDate = new Date(year, month - 1, dayNum);
+                const dateStr = formatDate(prevDate);
+                createDayCell(dayNum, dateStr, true);
+            }
+            
+            // 2. 当月分の日付を埋める
+            for (let i = 1; i <= totalDays; i++) {
+                const curDate = new Date(year, month, i);
+                const dateStr = formatDate(curDate);
+                createDayCell(i, dateStr, false);
+            }
+            
+            // 3. 翌月分の日付を埋める (42セルになるように調整)
+            const currentCellCount = startDayIndex + totalDays;
+            const remainingCells = 42 - currentCellCount;
+            for (let i = 1; i <= remainingCells; i++) {
+                const nextDate = new Date(year, month + 1, i);
+                const dateStr = formatDate(nextDate);
+                createDayCell(i, dateStr, true);
+            }
+        }
+
+        // カレンダーの1日分セルを生成
+        function createDayCell(dayNum, dateStr, isAdjacentMonth) {
+            const cell = document.createElement('div');
+            
+            // クラス名ベース設定
+            cell.className = "bg-white min-h-[85px] p-2 flex flex-col justify-between transition relative border-b border-r border-slate-100 hover:bg-slate-50 cursor-pointer select-none";
+            
+            if (isAdjacentMonth) {
+                cell.classList.add("text-slate-300", "bg-slate-50/50");
+            } else {
+                cell.classList.add("text-slate-700");
+                
+                // 土日の日付の色分け
+                const dateObj = new Date(dateStr);
+                const dayOfWeek = dateObj.getDay();
+                if (dayOfWeek === 0) {
+                    cell.classList.add("text-rose-500");
+                } else if (dayOfWeek === 6) {
+                    cell.classList.add("text-indigo-500");
+                }
+            }
+            
+            // 選択中の日付の強調
+            if (dateStr === selectedDateStr) {
+                cell.classList.remove("hover:bg-slate-50");
+                cell.classList.add("bg-indigo-50/80", "ring-2", "ring-indigo-500", "ring-inset", "z-10");
+            }
+
+            // 日付表示用の要素
+            const dayNumSpan = document.createElement('span');
+            dayNumSpan.className = "text-xs font-bold";
+            dayNumSpan.textContent = dayNum;
+            
+            // 本日マーク
+            const todayStr = formatDate(new Date());
+            if (dateStr === todayStr) {
+                dayNumSpan.className = "text-xs font-black bg-indigo-600 text-white w-5 h-5 flex items-center justify-center rounded-full shadow-sm";
+            }
+            
+            cell.appendChild(dayNumSpan);
+
+            // 金額とメモマーク表示用コンテナ
+            const contentContainer = document.createElement('div');
+            contentContainer.className = "w-full text-right mt-1 flex flex-col justify-end items-end h-full gap-0.5";
+
+            const data = tradesData[dateStr];
+            if (data && data.amount !== undefined) {
+                const amount = Number(data.amount);
+                const amountSpan = document.createElement('span');
+                
+                if (amount > 0) {
+                    amountSpan.className = "text-[11px] md:text-xs font-bold text-blue-600 tracking-tight break-all";
+                    amountSpan.textContent = `+${amount.toLocaleString()}`;
+                } else if (amount < 0) {
+                    amountSpan.className = "text-[11px] md:text-xs font-bold text-rose-600 tracking-tight break-all";
+                    amountSpan.textContent = amount.toLocaleString();
+                } else {
+                    amountSpan.className = "text-[11px] md:text-xs font-medium text-slate-400 tracking-tight break-all";
+                    amountSpan.textContent = "0";
+                }
+                contentContainer.appendChild(amountSpan);
+
+                // メモありのマーク
+                if (data.memo && data.memo.trim() !== "") {
+                    const memoDot = document.createElement('div');
+                    memoDot.className = "w-1.5 h-1.5 bg-slate-400 rounded-full mt-0.5"
+                    memoDot.setAttribute("title", data.memo);
+                    contentContainer.appendChild(memoDot);
+                }
+            }
+
+            cell.appendChild(contentContainer);
+
+            // クリックイベント
+            cell.addEventListener('click', () => {
+                selectedDateStr = dateStr;
+                // クリックされたセルが隣の月の日付なら、カレンダー表示自体もその月に切り替える
+                const clickedDate = new Date(dateStr);
+                if (clickedDate.getMonth() !== currentDate.getMonth() || clickedDate.getFullYear() !== currentDate.getFullYear()) {
+                    currentDate = new Date(clickedDate.getFullYear(), clickedDate.getMonth(), 1);
+                }
+                renderApp();
+            });
+
+            calendarGrid.appendChild(cell);
+        }
+
+        // 選択された日の詳細・フォームを更新
+        function renderSelectedDayForm() {
+            // 日付選択ピッカーの値をセット
+            datePickerInput.value = selectedDateStr;
+
+            const data = tradesData[selectedDateStr];
+            if (data) {
+                amountInput.value = data.amount !== undefined ? data.amount : "";
+                memoInput.value = data.memo !== undefined ? data.memo : "";
+            } else {
+                amountInput.value = "";
+                memoInput.value = "";
+            }
+        }
+
+        // 日付ピッカー変更イベント（カレンダーと完全同期）
+        datePickerInput.addEventListener('change', (e) => {
+            const pickedDateStr = e.target.value;
+            if (!pickedDateStr) return;
+
+            selectedDateStr = pickedDateStr;
+            const pickedDate = new Date(pickedDateStr);
+            
+            // カレンダーの表示月も、選択された日付の月に追従させる
+            currentDate = new Date(pickedDate.getFullYear(), pickedDate.getMonth(), 1);
+            
+            renderApp();
+        });
+
+        // 保存処理
+        saveBtn.addEventListener('click', () => {
+            const amountVal = amountInput.value.trim();
+            const memoVal = memoInput.value.trim();
+
+            if (amountVal === "") {
+                // 金額未入力の状態で保存したら削除扱いにする
+                delete tradesData[selectedDateStr];
+            } else {
+                tradesData[selectedDateStr] = {
+                    amount: Number(amountVal),
+                    memo: memoVal
+                };
+            }
+
+            saveToLocalStorage();
+            renderApp();
+            showToast("取引結果を保存しました");
+        });
+
+        // クリア（削除）処理
+        deleteBtn.addEventListener('click', () => {
+            if (tradesData[selectedDateStr]) {
+                delete tradesData[selectedDateStr];
+                saveToLocalStorage();
+                renderApp();
+                showToast("記録をクリアしました");
+            } else {
+                amountInput.value = "";
+                memoInput.value = "";
+            }
+        });
+
+        // トースト通知を表示
+        function showToast(msg) {
+            toastMsg.textContent = msg;
+            toast.classList.remove('hidden');
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 3000);
+        }
+
+        // 月間集計データの算出
+        function renderSummary() {
+            const targetYear = currentDate.getFullYear();
+            const targetMonth = currentDate.getMonth(); // 0-11
+            
+            let total = 0;
+            let plusTotal = 0;
+            let minusTotal = 0;
+            let winCount = 0;
+            let lossCount = 0;
+
+            Object.keys(tradesData).forEach(dateKey => {
+                const date = new Date(dateKey);
+                if (date.getFullYear() === targetYear && date.getMonth() === targetMonth) {
+                    const val = Number(tradesData[dateKey].amount || 0);
+                    total += val;
+                    if (val > 0) {
+                        plusTotal += val;
+                        winCount++;
+                    } else if (val < 0) {
+                        minusTotal += val;
+                        lossCount++;
+                    }
+                }
+            });
+
+            // 合計
+            monthTotalProfit.textContent = formatCurrency(total);
+            if (total > 0) {
+                monthTotalProfit.className = "text-xl font-bold tracking-tight text-blue-600";
+            } else if (total < 0) {
+                monthTotalProfit.className = "text-xl font-bold tracking-tight text-rose-600";
+            } else {
+                monthTotalProfit.className = "text-xl font-bold tracking-tight text-slate-800";
+            }
+
+            // プラスマイナス合計
+            monthPlusTotal.textContent = formatCurrency(plusTotal);
+            monthMinusTotal.textContent = formatCurrency(minusTotal);
+
+            // 勝率
+            const totalGames = winCount + lossCount;
+            if (totalGames > 0) {
+                const rate = ((winCount / totalGames) * 100).toFixed(1);
+                monthWinRate.textContent = `${rate}%`;
+                monthWinLossCount.textContent = `(${winCount}勝${lossCount}敗)`;
+            } else {
+                monthWinRate.textContent = "0%";
+                monthWinLossCount.textContent = "(0勝0敗)";
+            }
+        }
+
+        // 金額のフォーマット表記
+        function formatCurrency(val) {
+            const prefix = val > 0 ? "+" : "";
+            return `${prefix}${val.toLocaleString()}円`;
+        }
+
+        // 年間累計・月別推移グラフの描画
+        function renderChart() {
+            const targetYear = currentDate.getFullYear();
+            const monthlyData = Array(12).fill(0);
+            let yearTotal = 0;
+
+            // 月別集計
+            Object.keys(tradesData).forEach(dateKey => {
+                const date = new Date(dateKey);
+                if (date.getFullYear() === targetYear) {
+                    const amount = Number(tradesData[dateKey].amount || 0);
+                    const monthIdx = date.getMonth(); // 0-11
+                    monthlyData[monthIdx] += amount;
+                    yearTotal += amount;
+                }
+            });
+
+            // 年間累計の表示
+            yearAccumulatedProfit.textContent = formatCurrency(yearTotal);
+            if (yearTotal > 0) {
+                yearAccumulatedProfit.className = "font-bold text-blue-600";
+            } else if (yearTotal < 0) {
+                yearAccumulatedProfit.className = "font-bold text-rose-600";
+            } else {
+                yearAccumulatedProfit.className = "font-bold text-slate-800";
+            }
+
+            // グラフの破棄と再生成
+            if (chartInstance) {
+                chartInstance.destroy();
+            }
+
+            // 月別の背景色決定 (プラス：青系、マイナス：赤系)
+            const backgroundColors = monthlyData.map(val => val >= 0 ? 'rgba(59, 130, 246, 0.75)' : 'rgba(239, 68, 68, 0.75)');
+            const borderColors = monthlyData.map(val => val >= 0 ? 'rgb(37, 99, 235)' : 'rgb(220, 38, 38)');
+
+            const ctx = document.getElementById('yearlyChart').getContext('2d');
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['1月', '2月', '3月', '4月', '5月', '6月', '7月', '8月', '9月', '10月', '11月', '12月'],
+                    datasets: [{
+                        label: '月間損益 (円)',
+                        data: monthlyData,
+                        backgroundColor: backgroundColors,
+                        borderColor: borderColors,
+                        borderWidth: 1.5,
+                        borderRadius: 6,
+                        borderSkipped: false,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            display: false
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        label += new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(context.parsed.y);
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            grid: {
+                                color: '#e2e8f0',
+                            },
+                            ticks: {
+                                color: '#64748b',
+                                font: {
+                                    size: 11
+                                },
+                                callback: function(value) {
+                                    if (value >= 10000 || value <= -10000) {
+                                        return (value / 10000) + '万円';
+                                    }
+                                    return value + '円';
+                                }
+                            }
+                        },
+                        x: {
+                            grid: {
+                                display: false
+                            },
+                            ticks: {
+                                color: '#64748b',
+                                font: {
+                                    size: 11,
+                                    weight: 'bold'
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // --- イベントリスナー設定 ---
+
+        // 年変更ボタン
+        prevYearBtn.addEventListener('click', () => {
+            currentDate.setFullYear(currentDate.getFullYear() - 1);
+            renderApp();
+        });
+        nextYearBtn.addEventListener('click', () => {
+            currentDate.setFullYear(currentDate.getFullYear() + 1);
+            renderApp();
+        });
+
+        // 月変更ボタン
+        prevMonthBtn.addEventListener('click', () => {
+            currentDate.setMonth(currentDate.getMonth() - 1);
+            renderApp();
+        });
+        nextMonthBtn.addEventListener('click', () => {
+            currentDate.setMonth(currentDate.getMonth() + 1);
+            renderApp();
+        });
+        todayBtn.addEventListener('click', () => {
+            currentDate = new Date();
+            setTodaySelected();
+            renderApp();
+        });
+
+        // データバックアップ(Export)
+        exportBtn.addEventListener('click', () => {
+            const dataStr = JSON.stringify(tradesData, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `FX_損益データ_${formatDate(new Date())}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            showToast("JSON形式でエクスポートしました");
+        });
+
+        // データ復元(Import)トリガー
+        importBtn.addEventListener('click', () => {
+            importFile.click();
+        });
+
+        // データのファイル読み込み
+        importFile.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    const importedData = JSON.parse(evt.target.result);
+                    // 簡単なオブジェクト構造チェック
+                    if (typeof importedData === 'object' && importedData !== null) {
+                        tradesData = importedData;
+                        saveToLocalStorage();
+                        renderApp();
+                        showToast("データを正常に復元しました");
+                    } else {
+                        alert("不正なファイルフォーマットです。");
+                    }
+                } catch (err) {
+                    alert("JSONファイルの解析に失敗しました。");
+                }
+            };
+            reader.readAsText(file);
+            // リセットして同じファイルを再度選べるようにする
+            importFile.value = '';
+        });
+
+    </script>
+</body>
+</html>
